@@ -19,7 +19,7 @@ services:
           connections:
             docker-kafka-server:
               properties:
-                bootstrap.servers: "kafka:9092"
+                bootstrap.servers: "kafka:29092"
               schema-registry:
                 url: "http://schema-registry:8085"
               connect:
@@ -37,6 +37,8 @@ services:
       - zookeeper-log:/var/lib/zookeeper/log
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - 2181:2181
 
   kafka:
     image: confluentinc/cp-kafka
@@ -49,10 +51,13 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_CONFLUENT_SUPPORT_METRICS_ENABLE: 'false'
       KAFKA_JMX_PORT: 9091
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - 9092:9092
     links:
       - zookeeper
 
@@ -60,8 +65,9 @@ services:
     image: confluentinc/cp-schema-registry
     depends_on:
       - kafka
+    restart: on-failure
     environment:
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:9092"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:29092"
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8085"
       SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
@@ -72,7 +78,7 @@ services:
       - kafka
       - schema-registry
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
       CONNECT_REST_PORT: 8083
       CONNECT_REST_LISTENERS: http://0.0.0.0:8083
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
@@ -95,7 +101,8 @@ services:
 
   test-data:
     image: gradle:6.3-jdk11
-    command: "gradle --no-daemon testInjectData"
+    command: "gradle --no-daemon testInjectData"    
+    restart: on-failure
     working_dir: /app
     volumes:
       - ./:/app
@@ -105,11 +112,14 @@ services:
 
   kafkacat:
     image: confluentinc/cp-kafkacat
+    depends_on:
+      - kafka
+    restart: on-failure
     command: 
       - bash 
       - -c 
       - |
-        kafkacat -P -b kafka:9092 -t json << EOF
+        kafkacat -P -b kafka:29092 -t json << EOF
         {"_id":"5c4b2b45ab234c86955f0802","index":0,"guid":"d3637b06-9940-4958-9f82-639001c14c34"}
         {"_id":"5c4b2b459ffa9bb0c0c249e1","index":1,"guid":"08612fb5-40a7-45e5-9ff2-beb89a1b2835"}
         {"_id":"5c4b2b4545d7cbc7bf8b6e3e","index":2,"guid":"4880280a-cf8b-4884-881e-7b64ebf2afd0"}
@@ -118,7 +128,7 @@ services:
         {"_id":"5c4b2b45d6d3b5c51d3dacb7","index":5,"guid":"a20cfc3a-934a-4b93-9a03-008ec651b5a4"}
         EOF
         
-        kafkacat -P -b kafka:9092 -t csv << EOF
+        kafkacat -P -b kafka:29092 -t csv << EOF
         1,Sauncho,Attfield,sattfield0@netlog.com,Male,221.119.13.246
         2,Luci,Harp,lharp1@wufoo.com,Female,161.14.184.150
         3,Hanna,McQuillan,hmcquillan2@mozilla.com,Female,214.67.74.80
@@ -126,6 +136,6 @@ services:
         5,Mordecai,Hurdiss,mhurdiss4@rambler.ru,Male,175.123.45.143
         EOF
 
-        kafkacat -b kafka:9092 -o beginning -G json-consumer json
+        kafkacat -b kafka:29092 -o beginning -G json-consumer json
     links:
       - kafka
